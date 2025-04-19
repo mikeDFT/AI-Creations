@@ -7,7 +7,9 @@ from torchvision import models, transforms
 from torchvision.models import resnet18, ResNet18_Weights
 from PIL import Image
 import os
-from ultralytics import YOLO  # Used for both pet and face detection
+from ultralytics import YOLO  # used for both pet and face detection
+from yolov5facedetector.detector import Yolov5FaceDetector
+
 
 # --- Setup ---
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -26,8 +28,9 @@ weights = ResNet18_Weights.DEFAULT
 pet_classifier = resnet18(weights=weights)
 pet_classifier.eval()
 
-# for creating bounding boxes for pets
-yolo_model = YOLO("yolov8n.pt")
+# YOLO models for pet and face detection
+yolo_pet_model = YOLO("yolov8n.pt") # for pets
+yolo_face_model = YOLO("yolov5s-face.pt")  # for face detection
 
 # --- Preprocessing ---
 transform = transforms.Compose([
@@ -45,17 +48,26 @@ input("Press Enter to give consent and continue...")
 
 # --- Enroll owner if not saved ---
 def enroll_owner(frame):
-	img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-	face_tensor = mtcnn(img)
-	if face_tensor is not None:
-		if len(face_tensor.shape) == 3:
-			face_tensor = face_tensor.unsqueeze(0)  # Add batch dimension only if missing
-		face_embedding = resnet(face_tensor.to(device))
-		
+	face_results = yolo_face_model(frame, verbose=False)[0]
+	
+	for r in face_results.boxes.data.tolist():
+		x1, y1, x2, y2, score, cls_id = r
+		if score < 0.6:
+			continue
+			
+		face_crop = frame[int(y1):int(y2), int(x1):int(x2)]
+		if face_crop.size == 0:
+			continue
+			
+		face_img = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+		face_tensor = transform(face_img).unsqueeze(0).to(device)
+		face_embedding = resnet(face_tensor)
 		torch.save(face_embedding, face_embedding_path)
+		
 		print("✅ Owner face enrolled.")
-	else:
-		print("⚠️ No face detected. Try again.")
+		return
+	
+	print("⚠️ No valid face detected. Try again.")
 
 
 if not os.path.exists(face_embedding_path):
@@ -88,49 +100,41 @@ while True:
 	label = "Nobody"
 	detected_pet = False
 	
-	if boxes is not None and len(boxes) > 0:
-		for box in boxes:
-			# print(box)
-			x1, y1, x2, y2 = [int(i) for i in box]
-			face_crop = frame[y1:y2, x1:x2]
-			
-			if face_crop.size == 0: # sometimes the bounding box is outside the frame
-				continue
-				
-			face_img = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
-			cv2.imshow("Face", cv2.cvtColor(np.array(face_img), cv2.COLOR_RGB2BGR))
-				
-			try:
-				face_tensor = mtcnn(face_img)
-				if face_tensor is not None:
-					if len(face_tensor.shape) == 3:
-						face_tensor = face_tensor.unsqueeze(0)  # Add batch dimension only if missing
-					face_embedding = resnet(face_tensor.to(device))
-					
-					similarity = torch.nn.functional.cosine_similarity(face_embedding, owner_embedding).item()
-					if similarity > 0.8:
-						label = "Owner"
-					else:
-						label = "Another Person"
-					cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-					cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-			except Exception as e:
-				print(f"MTCNN failed: {e}")
+	# --- Face Detection ---
+	face_results = yolo_face_model(frame, verbose=False)[0]
+	for r in face_results.boxes.data.tolist():
+		x1, y1, x2, y2, score, cls_id = r
+		if score < 0.6:
+			continue
+		x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+		face_crop = frame[y1:y2, x1:x2]
+		
+		if face_crop.size == 0:
+			continue
+		
+		face_img = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+		face_tensor = transform(face_img).unsqueeze(0).to(device)
+		face_embedding = resnet(face_tensor)
+		similarity = torch.nn.functional.cosine_similarity(face_embedding, owner_embedding).item()
+		
+		label = "Owner" if similarity > 0.8 else "Another Person"
+		
+		cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+		cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 			
 	# --- Pet Detection ---
-	yolo_results = yolo_model(frame, verbose=False)[0]  # Detect in the original frame
-	for r in yolo_results.boxes.data.tolist():
+	pet_results = yolo_pet_model(frame, verbose=False)[0]
+	for r in pet_results.boxes.data.tolist():
 		x1, y1, x2, y2, score, cls_id = r
 		cls_id = int(cls_id)
-		
 		if cls_id in [15, 16] and score > 0.5:  # cat or dog
 			detected_pet = True
 			label = "Owner's Pet" if label == "Owner" else "Pet Only"
 			cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 200, 0), 2)
 			cv2.putText(frame, "Pet", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 200, 0), 2)
 	
-	# Fallback label (no face or pet)
-	if boxes is None and not detected_pet:
+	# fallback label (no face or pet)
+	if face_results.boxes.data.shape[0] == 0 and not detected_pet:
 		label = "Nobody"
 	
 	cv2.putText(frame, label, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
