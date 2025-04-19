@@ -2,12 +2,13 @@
 import cv2
 import torch
 import numpy as np
+from cryptography.fernet import Fernet
 from facenet_pytorch import MTCNN, InceptionResnetV1
-from torchvision import models, transforms
 from torchvision.models import resnet18, ResNet18_Weights
 from PIL import Image
 import os
 from ultralytics import YOLO  # Used for both pet and face detection
+import Cryptography
 
 # --- Setup ---
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -29,31 +30,28 @@ pet_classifier.eval()
 # for creating bounding boxes for pets
 yolo_model = YOLO("yolov8n.pt")
 
-# --- Preprocessing ---
-transform = transforms.Compose([
-	transforms.Resize((224, 224)),
-	transforms.ToTensor(),
-])
-
 # --- Consent prompt ---
 print("Webcam-based identity classifier (Owner | Pet | Person | Nobody)")
 print("All processing is local. No data is transmitted.")
 input("Press Enter to give consent and continue...")
+print("If you want to quit, press 'q'")
 
-owner_embeddings = []
+owner_embeddings = [] # A face embedding is a list of numbers (a tensor) that uniquely represents a face.
 folder_path = 'owner_face_images'
 
-# --- Enroll owner if not saved ---
+# --- Enroll owner ---
 def enroll_owner(frame, max_owner_face_img_nr):
 	img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 	faces = mtcnn(img)
 	if faces is not None and len(faces) == 1:
 		if len(faces.shape) == 3:
-			face_tensor = faces.unsqueeze(0)  # Add batch dimension only if missing
+			faces = faces.unsqueeze(0)  # Add dimension only if missing
+			
 		face_embedding = resnet(faces.to(device))
+		owner_embeddings.append(face_embedding)
 		
 		max_owner_face_img_nr += 1
-		torch.save(face_embedding, folder_path + "/" + str(max_owner_face_img_nr) + ".pt")
+		Cryptography.encrypt_embedding(face_embedding, os.path.join(folder_path, f"{max_owner_face_img_nr}.pt"))
 		
 		print("✅ Owner face enrolled.")
 	else:
@@ -70,7 +68,7 @@ def load_owner_face_pics():
 		# Check if the file ends with '.pt'
 		if filename.endswith('.pt'):
 			# Load the embedding from the .pt file
-			embedding = torch.load(face_embedding_path)
+			embedding = Cryptography.decrypt_embedding(face_embedding_path)
 			
 			# Append the embedding to the list
 			owner_embeddings.append(embedding)
@@ -84,18 +82,21 @@ def load_owner_face_pics():
 
 print("👤 Take pictures of your face as the owner")
 cap = cv2.VideoCapture(0)
+max_owner_face_img_nr = load_owner_face_pics()
 while True:
 	ret, frame = cap.read()
-	cv2.imshow("Enroll - Press 'e' to capture, 'c' to continue", frame)
-	
-	max_owner_face_img_nr = load_owner_face_pics()
+	cv2.imshow("Enroll - Press 'e' to capture, 'c' to continue, 'q' to quit", frame)
 	
 	waitKey = cv2.waitKey(1)
 	if waitKey & 0xFF == ord('e'):
 		max_owner_face_img_nr = enroll_owner(frame, max_owner_face_img_nr)
 	if waitKey & 0xFF == ord('c'):
 		break
-		
+	if waitKey & 0xFF == ord('q'):
+		cap.release()
+		cv2.destroyAllWindows()
+		exit()
+
 cap.release()
 cv2.destroyAllWindows()
 
@@ -104,6 +105,7 @@ cap = cv2.VideoCapture(0)
 print("📷 Starting webcam... Press 'q' to quit.")
 
 # function used to check if YOLO already detected a pet there
+# if the intersection is quite large, compared to the union, then the boxes are on top of one another
 def IntersectionOverUnion(box1, box2):
 	x1 = max(box1[0], box2[0])
 	y1 = max(box1[1], box2[1])
@@ -120,6 +122,7 @@ def IntersectionOverUnion(box1, box2):
 	else:
 		return 0
 
+# I use this code in many places, so I made a function
 def addToLabel(label, toAdd):
 	if label == "Nobody":
 		return toAdd
@@ -155,6 +158,7 @@ while True:
 			cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 200, 0), 2)
 			cv2.putText(frame, "Pet", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 200, 0), 2)
 	
+	# process the faces from MTCNN
 	if boxes is not None and len(boxes) > 0:
 		for box in boxes:
 			x1, y1, x2, y2 = [int(i) for i in box]
@@ -178,6 +182,9 @@ while True:
 						face_tensor = face_tensor.unsqueeze(0)  # Add batch dimension only if missing
 					face_embedding = resnet(face_tensor.to(device))
 					
+					# Stacking: combining multiple embedding vectors into a single tensor to process or compare them together.
+					# basically makes it a list of embeddings
+					# then I take their mean, which makes it a general representation of my face
 					owner_embedding = torch.stack(owner_embeddings).mean(dim=0)
 					
 					similarity = torch.nn.functional.cosine_similarity(face_embedding, owner_embedding).item()
