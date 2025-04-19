@@ -1,0 +1,8 @@
+opencv-python
+torch
+torchvision
+numpy
+pillow
+facenet-pytorch
+ultralytics
+cryptography
