@@ -39,7 +39,7 @@ face_embedding_path = "owner_face.pt"
 
 # --- Consent prompt ---
 print("Webcam-based identity classifier (Owner | Pet | Stranger | Nobody)")
-print("All processing is local. No data is saved or transmitted.")
+print("All processing is local. No data is transmitted.")
 input("Press Enter to give consent and continue...")
 
 
