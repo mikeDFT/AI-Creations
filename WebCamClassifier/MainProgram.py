@@ -2,7 +2,6 @@
 import cv2
 import torch
 import numpy as np
-from cryptography.fernet import Fernet
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from torchvision.models import resnet18, ResNet18_Weights
 from PIL import Image
