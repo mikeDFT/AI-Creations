@@ -30,14 +30,25 @@ pet_classifier.eval()
 # for creating bounding boxes for pets
 yolo_model = YOLO("yolov8n.pt")
 
-# --- Consent prompt ---
-print("Webcam-based identity classifier (Owner | Pet | Person | Nobody)")
-print("All processing is local. No data is transmitted.")
-input("Press Enter to give consent and continue...")
-print("If you want to quit, press 'q'")
-
 owner_embeddings = [] # A face embedding is a list of numbers (a tensor) that uniquely represents a face.
 folder_path = 'owner_face_images'
+
+# --- Consent prompt ---
+print("Webcam-based identity classifier (Owner | Pet | Person | Nobody)")
+print("All processing is local, no API or any external calls. No data is transmitted.")
+print("All of the owner's facial images are encrypted, saved locally and only processed locally by pretrained models")
+answer = input("Type 'opt out' if you want all your data to be erased or press Enter to give consent and continue\n> ")
+if answer == "opt out":
+	for filename in os.listdir(folder_path):
+		face_embedding_path = os.path.join(folder_path, filename)
+		# Check if the file ends with '.pt'
+		if filename.endswith('.pt'):
+			os.remove(face_embedding_path)
+			
+	Cryptography.remove_key()
+	
+	print("Successfully removed all locally saved data")
+	exit()
 
 # --- Enroll owner ---
 def enroll_owner(frame, max_owner_face_img_nr):
@@ -81,6 +92,7 @@ def load_owner_face_pics():
 
 
 print("👤 Take pictures of your face as the owner")
+print("Press 'e' to capture, 'c' to continue, 'q' to quit")
 cap = cv2.VideoCapture(0)
 max_owner_face_img_nr = load_owner_face_pics()
 while True:
@@ -91,7 +103,10 @@ while True:
 	if waitKey & 0xFF == ord('e'):
 		max_owner_face_img_nr = enroll_owner(frame, max_owner_face_img_nr)
 	if waitKey & 0xFF == ord('c'):
-		break
+		if len(owner_embeddings) == 0:
+			print("No owner embeddings (pictures) provided, please capture pictures by pressing 'e'")
+		else:
+			break
 	if waitKey & 0xFF == ord('q'):
 		cap.release()
 		cv2.destroyAllWindows()
@@ -203,7 +218,7 @@ while True:
 				print(f"MTCNN failed: {e}")
 	
 	cv2.putText(frame, label, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
-	cv2.imshow("AI Classifier", frame)
+	cv2.imshow("AI Classifier - Press 'q' to quit", frame)
 	
 	if cv2.waitKey(1) & 0xFF == ord('q'):
 		break

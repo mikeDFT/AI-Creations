@@ -8,6 +8,9 @@ def load_key():
         generateKey()
     return open("secret.key", "rb").read()
 
+def remove_key():
+    if os.path.isfile("secret.key"):
+        os.remove("secret.key")
 
 def generateKey():
     # Generate a key (do this once and store securely)
