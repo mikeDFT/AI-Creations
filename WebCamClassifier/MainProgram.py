@@ -17,14 +17,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # otherwise it'd return the largest one
 mtcnn = MTCNN(keep_all=True, device=device)
 
-# Inception ResNet V1 for face recognition (detect owner)
+# Inception ResNet V1 for face recognition, creating embeddings to detect if the
+# face is of the owner or not
 resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
-
-# pet classifier (also using resnet, but ResNet18, not Inception),
-# for classifying between human and pet
-weights = ResNet18_Weights.DEFAULT
-pet_classifier = resnet18(weights=weights)
-pet_classifier.eval()
 
 # for creating bounding boxes for pets
 yolo_model = YOLO("yolov8n.pt")
