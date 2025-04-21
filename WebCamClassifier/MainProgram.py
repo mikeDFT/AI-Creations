@@ -104,15 +104,27 @@ def takePicturesLoop():
 	print("👤 Take pictures of your face as the owner")
 	print("Press 'e' to capture, 'c' to continue, 'q' to quit")
 	cap = cv2.VideoCapture(0)
+	
 	max_owner_face_img_nr = load_owner_face_pics()
+	bounding_boxes = []
+	frame_count = -1
+	facesLabel = "None"
+	
 	while True:
 		ret, frame = cap.read()
+		frame_count += 1
 		
-		facesLabel = "None"
-		img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-		newFacesLabel = processMTCNNFaces(img, frame, facesLabel)
-		if newFacesLabel:
-			facesLabel = newFacesLabel
+		# change to %2 to render every 2 frames or to %1 to not use this
+		if frame_count % 1 == 0:
+			facesLabel = "None"
+			img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+			
+			bounding_boxes, newFacesLabel = processMTCNNFaces(img, frame, facesLabel)
+			if newFacesLabel:
+				facesLabel = newFacesLabel
+		
+		for boxTuple in bounding_boxes:
+			applyBoundingBox(frame, boxTuple)
 		
 		cv2.putText(frame, "Faces: " + facesLabel, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
 		cv2.imshow("Enroll - Press 'e' to capture, 'c' to continue, 'q' to quit", frame)
@@ -137,8 +149,10 @@ def takePicturesLoop():
 def processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedClasses, pet_boxes, label):
 	# --- Object Detection ---
 	yolo_results = yolo_model(frame, verbose=False)[0]  # Detect in the original frame
-	for r in yolo_results.boxes.data.tolist():
-		x1, y1, x2, y2, score, cls_id = r
+	bounding_boxes = []
+	
+	for data_result in yolo_results.boxes.data.tolist():
+		x1, y1, x2, y2, score, cls_id = data_result
 		cls_id = int(cls_id)
 		
 		if score > 0.5:
@@ -149,15 +163,22 @@ def processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedCl
 			pet_boxes.append((x1, y1, x2, y2))
 			
 			color = ((20 * cls_id + 170) % 213, (60 * cls_id + 60) % 213, (100 * cls_id + 10) % 213)
-			cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
-			cv2.putText(frame, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+			# cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+			# cv2.putText(frame, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 			
-			return addToLabel(label, class_name)
-
+			bounding_boxes.append((
+				((int(x1), int(y1)), (int(x2), int(y2)), color, 2),
+				(class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8)
+			))
+			
+			label = addToLabel(label, class_name)
+			
+	return bounding_boxes, label
 
 def processMTCNNFaces(img, frame, facesLabel):
 	# process the faces from MTCNN
 	boxes, _ = mtcnn.detect(img)
+	bounding_boxes = []
 	
 	if boxes is not None and len(boxes) > 0:
 		for box in boxes:
@@ -173,7 +194,8 @@ def processMTCNNFaces(img, frame, facesLabel):
 			# 	continue  # skip face box likely on a pet
 			
 			face_img = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
-			cv2.imshow("Face", cv2.cvtColor(np.array(face_img), cv2.COLOR_RGB2BGR))
+			# showing a window with the face
+			# cv2.imshow("Face", cv2.cvtColor(np.array(face_img), cv2.COLOR_RGB2BGR))
 			
 			try:
 				face_tensor = mtcnn(face_img)
@@ -195,31 +217,61 @@ def processMTCNNFaces(img, frame, facesLabel):
 						boxLabel = "Stranger"
 						boxColor = (0, 255, 0)
 					
-					cv2.rectangle(frame, (x1, y1), (x2, y2), boxColor, 2)
-					cv2.putText(frame, boxLabel, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, boxColor, 2)
+					# cv2.rectangle(frame, (x1, y1), (x2, y2), boxColor, 2)
+					# cv2.putText(frame, boxLabel, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, boxColor, 2)
 					
-					return addToLabel(facesLabel, boxLabel)
+					bounding_boxes.append((
+						((int(x1), int(y1)), (int(x2), int(y2)), boxColor, 2),
+						(boxLabel, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8)
+					))
+					
+					facesLabel = addToLabel(facesLabel, boxLabel)
 			except Exception as e:
 				print(f"MTCNN failed: {e}")
+	
+	return bounding_boxes, facesLabel
+
+def applyBoundingBox(frame, boundingBoxTuple):
+	pt1, pt2, color, thickness = boundingBoxTuple[0]
+	text, org, font, fontScale = boundingBoxTuple[1]
+	
+	cv2.rectangle(frame, pt1, pt2, color, thickness)
+	cv2.putText(frame, text, org, font, fontScale, color, thickness)
+	# cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+	# cv2.putText(frame, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
 
-def processSegmentation(frame):
+def processSegmentation(frame, show_only_restricted_classes, restrictedClasses):
 	seg_results = seg_model(frame, verbose=False)[0]
 	seg_masks = seg_results.masks
 	
+	class_ids = seg_results.boxes.cls.cpu().numpy()
+	
+	masks_list = []
+	
 	if seg_masks is not None:
-		i = 0
-		for mask in seg_masks.data:
+		mask_nr = 0
+		for (mask, cls_id) in zip(seg_masks.data, class_ids):
+			if show_only_restricted_classes:
+				class_name = yolo_model.names[cls_id]  # Get the human-readable class name
+				if show_only_restricted_classes and class_name not in restrictedClasses:
+					continue
+			
 			mask = mask.cpu().numpy()
 			binary_mask = mask > 0.5
 			
 			mask_layer = np.zeros_like(frame, dtype=np.uint8)
-			mask_layer[binary_mask] = colors[i]
+			mask_layer[binary_mask] = colors[mask_nr]
 			
 			alpha = 0.5
-			frame[binary_mask] = cv2.addWeighted(frame[binary_mask], 1 - alpha, mask_layer[binary_mask], alpha, 0)
-			i += 1
+			masks_list.append((binary_mask, mask_layer, alpha))
+			mask_nr += 1
+			
+	return masks_list
 
+def applyMask(frame, maskTuple):
+	binary_mask, mask_layer, alpha = maskTuple
+	frame[binary_mask] = cv2.addWeighted(frame[binary_mask], 1 - alpha, mask_layer[binary_mask], alpha, 0)
 
 # --- Main loop ---
 # function used to check if YOLO already detected a pet there
@@ -248,32 +300,59 @@ def addToLabel(givenLabel, toAdd):
 		return givenLabel + ", " + toAdd
 
 def main():
+	cap = cv2.VideoCapture(0)
+	
 	show_segmentation = False
 	show_only_restricted_classes = True
 	restrictedClasses = ["dog", "cat", "person"]
 	
-	cap = cv2.VideoCapture(0)
+	masks_list = []
+	YOLO_bounding_boxes = []
+	MTCNN_bounding_boxes = []
+	frame_count = -1
+	label = ""
+	facesLabel = ""
+	
 	print("📷 Starting webcam... Press 'q' to quit, 's' to turn on/off segmentation, 'r' to turn on/off restricted classes")
+	
 	while True:
+		frame_count += 1
 		ret, frame = cap.read()
 		if not ret:
 			break
 		
-		img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+		# change to %2 to render every 2 frames or to %1 to not use this
+		if frame_count % 1 == 0:
+			img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+			
+			label = "Nobody"
+			facesLabel = "None"
+			pet_boxes = []
+			
+			YOLO_bounding_boxes, label = processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedClasses, pet_boxes, label)
+			
+			MTCNN_bounding_boxes, facesLabel = processMTCNNFaces(img, frame, facesLabel)
+			
+			masks_list = []
+			if show_segmentation:
+				masks_list = processSegmentation(frame, show_only_restricted_classes, restrictedClasses)
+			
+			
+		# applying the bounding boxes and masks so that I can also apply them from other frames
+		# to be able to skip frames and make it faster
+		for boxTuple in YOLO_bounding_boxes:
+			applyBoundingBox(frame, boxTuple)
 		
-		label = "Nobody"
-		facesLabel = "None"
-		pet_boxes = []
-		
-		label = processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedClasses, pet_boxes, label)
-		
-		facesLabel = processMTCNNFaces(img, frame, facesLabel)
+		for boxTuple in MTCNN_bounding_boxes:
+			applyBoundingBox(frame, boxTuple)
 		
 		if show_segmentation:
-			processSegmentation(frame)
+			for maskTuple in masks_list:
+				applyMask(frame, maskTuple)
 		
 		cv2.putText(frame, label, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
 		cv2.putText(frame, "Faces: " + (facesLabel or "None"), (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
+		
 		cv2.imshow("AI Classifier - Press 'q' to quit, 's' to turn on/off segmentation, 'r' to turn on/off restricted classes", frame)
 		
 		waitKey = cv2.waitKey(1)
