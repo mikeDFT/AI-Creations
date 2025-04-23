@@ -23,9 +23,11 @@ resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
 # for creating bounding boxes for pets
 yolo_model = YOLO("yolov8n.pt")
+yolo_model.to(device)
 
 # for segmentation
-seg_model = YOLO("yolov8n-seg.pt")
+seg_yolo_model = YOLO("yolov8n-seg.pt")
+seg_yolo_model.to(device)
 
 owner_embeddings = [] # A face embedding is a list of numbers (a tensor) that uniquely represents a face.
 folder_path = 'owner_face_images'
@@ -83,7 +85,7 @@ def load_owner_face_pics():
 		# Check if the file ends with '.pt'
 		if filename.endswith('.pt'):
 			# Load the embedding from the .pt file
-			embedding = Cryptography.decrypt_embedding(face_embedding_path)
+			embedding = Cryptography.decrypt_embedding(face_embedding_path).to(device)
 			
 			# Append the embedding to the list
 			owner_embeddings.append(embedding)
@@ -141,12 +143,12 @@ def takePicturesLoop():
 	cv2.destroyAllWindows()
 
 
-def processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedClasses, pet_boxes, label):
+def processYOLOObjectDetection(results, show_only_restricted_classes, restrictedClasses, pet_boxes, label):
 	# --- Object Detection ---
-	yolo_results = yolo_model(frame, verbose=False)[0]  # Detect in the original frame
+	# yolo_results = yolo_model(frame, verbose=False)[0]  # Detect in the original frame
 	bounding_boxes = []
 	
-	for data_result in yolo_results.boxes.data.tolist():
+	for data_result in results.boxes.data.tolist():
 		x1, y1, x2, y2, score, cls_id = data_result
 		cls_id = int(cls_id)
 		
@@ -204,7 +206,7 @@ def processMTCNNFaces(img, frame, facesLabel):
 					# then I take their mean, which makes it a general representation of my face
 					owner_embedding = torch.stack(owner_embeddings).mean(dim=0)
 					
-					similarity = torch.nn.functional.cosine_similarity(face_embedding, owner_embedding).item()
+					similarity = torch.nn.functional.cosine_similarity(face_embedding, owner_embedding).squeeze().item()
 					if similarity > 0.7:
 						boxLabel = "Owner"
 						boxColor = (0, 150, 0)
@@ -222,7 +224,7 @@ def processMTCNNFaces(img, frame, facesLabel):
 					
 					facesLabel = addToLabel(facesLabel, boxLabel)
 			except Exception as e:
-				print(f"MTCNN failed: {e}")
+				print(f"MTCNN exception: {e}")
 	
 	return bounding_boxes, facesLabel
 
@@ -236,11 +238,11 @@ def applyBoundingBox(frame, boundingBoxTuple):
 	# cv2.putText(frame, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
 
-def processSegmentation(frame, show_only_restricted_classes, restrictedClasses):
-	seg_results = seg_model(frame, verbose=False)[0]
-	seg_masks = seg_results.masks
+def processSegmentation(results, frame, show_only_restricted_classes, restrictedClasses):
+	# seg_results = seg_yolo_model(frame, verbose=False)[0]
+	seg_masks = results.masks
 	
-	class_ids = seg_results.boxes.cls.cpu().numpy()
+	class_ids = results.boxes.cls.cpu().numpy()
 	
 	masks_list = []
 	
@@ -324,13 +326,21 @@ def main():
 			facesLabel = "None"
 			pet_boxes = []
 			
-			YOLO_bounding_boxes, label = processYOLOObjectDetection(frame, show_only_restricted_classes, restrictedClasses, pet_boxes, label)
+			masks_list = []
+			# if I show segmentation, then I use the segmentation model to do both, which is faster than having
+			# 2 forward passes (using 2 models)
+			# but if I don't need segmentation, the normal yolo model is slightly faster (doesn't compute segmentations
+			# as well) which makes it better since I use CPU on laptop - doesn't have GPU dedicated GPU :(
+			if show_segmentation:
+				results = seg_yolo_model(frame, verbose=False)[0]
+				masks_list = processSegmentation(results, frame, show_only_restricted_classes, restrictedClasses)
+			else:
+				results = yolo_model(frame, verbose=False)[0]  # Detect in the original frame
+			
+			YOLO_bounding_boxes, label = processYOLOObjectDetection(results, show_only_restricted_classes, restrictedClasses, pet_boxes, label)
 			
 			MTCNN_bounding_boxes, facesLabel = processMTCNNFaces(img, frame, facesLabel)
 			
-			masks_list = []
-			if show_segmentation:
-				masks_list = processSegmentation(frame, show_only_restricted_classes, restrictedClasses)
 			
 			
 		# applying the bounding boxes and masks so that I can also apply them from other frames
