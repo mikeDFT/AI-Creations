@@ -1,0 +1,65 @@
+Benchmark Optimization Functions Using Genetic Algorithms  
+Student Assignment
+
+Objective  
+The purpose of this assignment is to explore benchmark optimization functions and apply Genetic Algorithms (GAs) for finding their minima. You will select and implement two multimodal functions in Python, optimize them using a configurable GA, and conduct a statistical performance analysis of different GA configurations.
+
+Instructions  
+
+1. Function Selection  
+• Select two multimodal functions from the bibliographic reference [1]—focus on 2-dimensional functions from the first set of optimization functions.  
+• Clearly state the domain and the functional form:  
+  f1 : [a1, b1]× [c1, d1] −→ R, f1(x, y) = . . .  
+  f2 : [a2, b2]× [c2, d2] −→ R, f2(x, y) = . . .
+
+2. Function Implementation and Visualization  
+• Implement both functions in Python.  
+• Represent each function visually using 2D contour plots and 3D surface plots.
+
+3. Genetic Algorithm (GA) Optimization  
+• Implement a Genetic Algorithm capable of:  
+  – Two representations: binary encoding and real-valued encoding.  
+  – Two crossover types per representation:  
+    ∗ Binary: 1-point, 2-point crossover.  
+    ∗ Real-valued: arithmetic crossover, BLX-α crossover.  
+  – Adjustable parameters: mutation rate, crossover rate, population size, number of generations.
+
+4. Optimization Experiments  
+• Run experiments for both f1 and f2 using all combinations of representations and crossover methods.  
+• Ensure a fixed number of fitness function evaluations across configurations.  
+• For each configuration, conduct at least 30 independent runs.
+
+Benchmark Optimization Assignment
+
+5. Statistical Analysis  
+• Collect performance metrics: best fitness, mean, standard deviation.  
+• Use appropriate statistical tests (e.g., t-test, Wilcoxon, ANOVA) to determine if performance differences are statistically significant.  
+• Present your findings in tables and graphs.
+
+Deliverables  
+• Python codebase with modular structure and documentation.  
+• A written report (.pdf) including:  
+  – Description of the selected functions and their plots.  
+  – Explanation of GA configurations.  
+  – Tables and plots of experimental results.  
+  – Statistical comparison and conclusions.  
+• (Optional) Jupyter notebook or GUI application.
+
+Deadline  
+Last laboratory of the semester!
+
+Evaluation Criteria
+
+Criterion                                          | Weight  
+--------------------------------------------------|--------  
+Correct implementation of functions               | 15%  
+GA flexibility (representation and crossover)     | 20%  
+Code structure and documentation                  | 10%  
+Visual representation of functions                | 10%  
+Experimental execution and data analysis          | 25%  
+Statistical test and result interpretation        | 20%  
+
+Note: Academic honesty is expected. Cite any code or libraries used.
+
+Bibliographic Reference  
+1. Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments: Test Functions and Datasets. Retrieved May 13, 2025, from http://www.sfu.ca/~ssurjano.

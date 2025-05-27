@@ -1,0 +1,9 @@
+config_name,function_name,representation,crossover_type,best_fitness_mean,best_fitness_std,best_fitness_min,best_fitness_max,best_fitness_median,final_generation_mean,final_generation_std,fitness_evaluations_mean,fitness_evaluations_std,execution_time_mean,execution_time_std,convergence_rate_mean,convergence_rate_std,success_sum,success_mean
+ackley_binary_one_point,ackley,binary,one_point,0.308359,0.897624,0.002013,3.578341,0.002013,100,0,5050,0,0.318253,0.060417,0.009719,0.000744,0,0
+ackley_binary_two_point,ackley,binary,two_point,0.161182,0.66113,0.002013,3.576495,0.002013,100,0,5050,0,0.319257,0.036332,0.009854,0.000596,0,0
+ackley_real_valued_arithmetic,ackley,real_valued,arithmetic,0.266512,0.784487,1.00E-06,2.580685,0.010353,100,0,5050,0,0.220212,0.030404,0.009687,0.000959,2,0.066667
+ackley_real_valued_blx_alpha,ackley,real_valued,blx_alpha,0,0,0,2.00E-06,0,100,0,5050,0,0.241076,0.059201,0.01,0,29,0.966667
+rastrigin_binary_one_point,rastrigin,binary,one_point,0.324941,0.611661,2.00E-06,1.989925,2.20E-05,100,0,5050,0,0.243267,0.029586,0.009246,0.001784,0,0
+rastrigin_binary_two_point,rastrigin,binary,two_point,0.431399,0.6145,2.00E-06,2.233765,2.20E-05,100,0,5050,0,0.297349,0.033894,0.009222,0.001356,0,0
+rastrigin_real_valued_arithmetic,rastrigin,real_valued,arithmetic,0.468756,0.502991,2.50E-05,1.004389,0.030084,100,0,5050,0,0.155866,0.016872,0.009249,0.001031,0,0
+rastrigin_real_valued_blx_alpha,rastrigin,real_valued,blx_alpha,0.464648,0.568189,0,1.989918,0,100,0,5050,0,0.172639,0.020165,0.009241,0.001023,16,0.533333
