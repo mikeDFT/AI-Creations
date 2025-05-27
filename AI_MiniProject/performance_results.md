@@ -4,7 +4,6 @@
 
 **Execution Metrics:**
 - **Total experiments**: 240 independent runs
-- **Total fitness evaluations**: 1,212,000 function calls
 - **Average execution time**: 0.2-0.3 seconds per run
 - **Complete suite runtime**: 60-90 seconds
 - **Memory usage**: <50MB peak (efficient numpy arrays)
